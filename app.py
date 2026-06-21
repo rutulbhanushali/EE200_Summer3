@@ -4,6 +4,9 @@ import csv
 import tempfile
 
 import numpy as np
+import matplotlib
+
+matplotlib.use('Agg')  # CRITICAL FIX: Forces headless rendering to prevent macOS/cloud UI crashes
 import matplotlib.pyplot as plt
 import streamlit as st
 
@@ -13,6 +16,7 @@ st.set_page_config(page_title="EE200 Audio Fingerprinting", layout="wide")
 
 SONGS_DIR = "songs"
 DB_PATH = "db.pkl"
+
 
 @st.cache_resource
 def get_db():
@@ -25,33 +29,45 @@ def get_db():
             db.save(DB_PATH)
     return db
 
+
 db = get_db()
+
 
 def plot_spectrogram(samples):
     S, S_db, freqs, times = fp.compute_spectrogram(samples)
     fig, ax = plt.subplots(figsize=(8, 3))
-    ax.pcolormesh(times, freqs, S_db, shading="gouraud", cmap="magma")
-    ax.set_xlabel("time (s)"); ax.set_ylabel("frequency (Hz)")
+
+    # OPTIMIZATION: Swapped pcolormesh for imshow. It renders significantly faster in Streamlit.
+    ax.imshow(S_db, aspect='auto', origin='lower', cmap='magma',
+              extent=[times[0], times[-1], freqs[0], freqs[-1]])
+
+    ax.set_xlabel("time (s)")
+    ax.set_ylabel("frequency (Hz)")
     ax.set_title("Spectrogram")
     fig.tight_layout()
     return fig, S
+
 
 def plot_constellation(S):
     peaks = fp.find_peaks(S)
     fig, ax = plt.subplots(figsize=(8, 3))
     if peaks:
-        t = [p[0] for p in peaks]; f = [p[1] for p in peaks]
+        t = [p[0] for p in peaks]
+        f = [p[1] for p in peaks]
         ax.scatter(t, f, s=4, c="#2dd4bf")
-    ax.set_xlabel("time (frame)"); ax.set_ylabel("freq (bin)")
+    ax.set_xlabel("time (frame)")
+    ax.set_ylabel("freq (bin)")
     ax.set_title(f"Constellation - {len(peaks)} peaks")
     fig.tight_layout()
     return fig, peaks
+
 
 def plot_offset_hist(details):
     fig, ax = plt.subplots(figsize=(8, 3))
     hist = details.get("offset_hist", {})
     if hist:
-        offs = list(hist.keys()); cnts = list(hist.values())
+        offs = list(hist.keys())
+        cnts = list(hist.values())
         ax.bar(offs, cnts, color="#2dd4bf")
         ax.axvline(details["best_offset"], color="red", ls="--",
                    label=f"peak offset = {details['best_offset']}")
@@ -62,10 +78,12 @@ def plot_offset_hist(details):
     fig.tight_layout()
     return fig
 
+
 def identify_samples(samples):
     qhashes, qpeaks, S = fp.fingerprint_samples(samples)
     best, score, scores, details = fp.match(qhashes, db, return_details=True)
     return best, score, details, S, qpeaks
+
 
 st.title("EE200: Audio Fingerprinting")
 st.caption("Signals, Systems & Networks - Project. "
@@ -86,7 +104,7 @@ with tab_lib:
         cols = st.columns(3)
         for i, (label, n) in enumerate(sorted(db.songs.items())):
             with cols[i % 3]:
-                st.markdown(f"**{label}**  \n{n:,} hashes")
+                st.markdown(f"**{label}** \n{n:,} hashes")
 
 with tab_id:
     st.subheader("Identify a clip")
@@ -95,7 +113,8 @@ with tab_id:
     if up is not None:
         with tempfile.NamedTemporaryFile(delete=False,
                                          suffix=os.path.splitext(up.name)[1]) as tmp:
-            tmp.write(up.read()); tmp_path = tmp.name
+            tmp.write(up.read())
+            tmp_path = tmp.name
         samples = fp.load_audio(tmp_path)
         os.unlink(tmp_path)
 
@@ -104,20 +123,26 @@ with tab_id:
         if best is None:
             st.error("No match found (empty database or no overlapping hashes).")
         else:
-            st.success(f"MATCH FOUND: **{best}**  (cluster score {score})")
+            st.success(f"MATCH FOUND: **{best}** (cluster score {score})")
             runner = details["ranked"][1] if len(details["ranked"]) > 1 else None
             if runner:
                 st.caption(f"runner-up: {runner[0]} (score {runner[1]})")
 
         st.markdown("**Step 1 - Spectrogram**")
-        fig, S2 = plot_spectrogram(samples); st.pyplot(fig)
+        fig, S2 = plot_spectrogram(samples)
+        st.pyplot(fig)
+        plt.close(fig)  # MEMORY FIX: Flush from RAM
 
         st.markdown("**Step 2 - Constellation of peaks**")
-        figc, _ = plot_constellation(S2); st.pyplot(figc)
+        figc, _ = plot_constellation(S2)
+        st.pyplot(figc)
+        plt.close(figc)  # MEMORY FIX: Flush from RAM
 
         if best is not None:
             st.markdown("**Step 3 - Offset histogram (the deciding vote)**")
-            st.pyplot(plot_offset_hist(details))
+            fig_hist = plot_offset_hist(details)
+            st.pyplot(fig_hist)
+            plt.close(fig_hist)  # MEMORY FIX: Flush from RAM
 
             st.markdown("**Candidate scores**")
             for label, sc in details["ranked"][:6]:
@@ -136,8 +161,11 @@ with tab_batch:
         for i, f in enumerate(ups):
             with tempfile.NamedTemporaryFile(delete=False,
                                              suffix=os.path.splitext(f.name)[1]) as tmp:
-                tmp.write(f.read()); tmp_path = tmp.name
-            samples = fp.load_audio(tmp_path); os.unlink(tmp_path)
+                tmp.write(f.read())
+                tmp_path = tmp.name
+            samples = fp.load_audio(tmp_path)
+            os.unlink(tmp_path)
+
             qhashes, _, _ = fp.fingerprint_samples(samples)
             best, _, _ = fp.match(qhashes, db)
             rows.append((f.name, best if best else ""))
@@ -150,4 +178,3 @@ with tab_batch:
         st.dataframe(rows)
         st.download_button("Download results.csv", buf.getvalue(),
                            file_name="results.csv", mime="text/csv")
-
