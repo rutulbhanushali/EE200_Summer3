@@ -41,6 +41,7 @@ def get_single_peak_index():
         return fp.build_single_peak_index_from_folder(SONGS_DIR)
     
     return {}
+sp_index = get_single_peak_index()
 
 def plot_dft_magnitude(samples, sr=fp.SAMPLE_RATE):
     freqs, mag = fp.compute_dft_magnitude(samples, sr=sr)
