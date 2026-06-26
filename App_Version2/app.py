@@ -2,15 +2,15 @@ import os
 import io
 import csv
 import tempfile
+import pickle
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
-from collections import defaultdict
 import fingerprint as fp
-import pickle
 
 st.set_page_config(page_title="Audio Fingerprinting", layout="wide")
 SONGS_DIR = "songs"
@@ -29,18 +29,18 @@ def get_db():
     return db
 
 db = get_db()
+
 @st.cache_resource
 def get_single_peak_index():
-    # Primary: Load the pre-computed file (Streamlit will use this)
     if os.path.exists("sp_index.pkl"):
         with open("sp_index.pkl", "rb") as f:
             return pickle.load(f)
             
-    # Fallback: Just in case you run locally without building the pkl first
     if os.path.isdir(SONGS_DIR):
         return fp.build_single_peak_index_from_folder(SONGS_DIR)
     
     return {}
+
 sp_index = get_single_peak_index()
 
 def plot_dft_magnitude(samples, sr=fp.SAMPLE_RATE):
@@ -193,29 +193,11 @@ with tab_id:
 
         st.divider()
         st.markdown("**Q3A Comparison – Single-peak vs pair-hash matching**")
-
-        sp_index_approx = {}
-        for h_str, entries in db.index.items():
-            for label, t in entries:
-                if label not in sp_index_approx:
-                    sp_index_approx[label] = set()
-
-        qfreqs = set(f for _, f in peaks)
-        sp_scores = {}
-
-        song_freq_sets = defaultdict(set)
-        for h_str, entries in db.index.items():
-            for label, t in entries:
-                song_freq_sets[label].add(t % (fp.N_FFT // 2 + 1))
-
-        st.divider()
         st.markdown(
-            "**Q3A Comparison – Single-peak matching vs pair-hash matching**\n\n"
             "Single-peak matching ignores time alignment and pairing, so many songs "
             "share the same frequency bins by chance, yielding unreliable scores."
         )
 
-        
         with st.spinner("Computing single-peak scores..."):
             sp_best_label, sp_best_score, sp_scores = fp.match_single_peaks(peaks, sp_index)
             

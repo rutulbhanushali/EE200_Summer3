@@ -5,9 +5,9 @@ import fingerprint as fp
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--songs", default="songs", help="Folder with audio files")
-    parser.add_argument("--out", default="db.pkl", help="Output path")
-    parser.add_argument("--sp_out", default="sp_index.pkl", help="Output path for single-peak index")
+    parser.add_argument("--songs", default="songs")
+    parser.add_argument("--out", default="db.pkl")
+    parser.add_argument("--sp_out", default="sp_index.pkl")
     args = parser.parse_args()
 
     print(f"Building fingerprint database from '{args.songs}'...")
@@ -22,12 +22,10 @@ def main():
 
     db.save(args.out)
     
-    # --- NEW: Build and save the single-peak index ---
     print(f"Building single-peak index from '{args.songs}'...")
     sp_index = fp.build_single_peak_index_from_folder(args.songs)
     with open(args.sp_out, "wb") as f:
         pickle.dump(sp_index, f)
-    # -------------------------------------------------
 
     elapsed = time.time() - t0
     total_h = sum(db.songs.values())
