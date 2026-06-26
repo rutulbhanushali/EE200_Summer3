@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from collections import defaultdict
 import fingerprint as fp
+import pickle
 
 st.set_page_config(page_title="Audio Fingerprinting", layout="wide")
 SONGS_DIR = "songs"
@@ -30,12 +31,16 @@ def get_db():
 db = get_db()
 @st.cache_resource
 def get_single_peak_index():
-    """Cache the true single-peak index to avoid re-reading audio files on every run."""
+    # Primary: Load the pre-computed file (Streamlit will use this)
+    if os.path.exists("sp_index.pkl"):
+        with open("sp_index.pkl", "rb") as f:
+            return pickle.load(f)
+            
+    # Fallback: Just in case you run locally without building the pkl first
     if os.path.isdir(SONGS_DIR):
         return fp.build_single_peak_index_from_folder(SONGS_DIR)
+    
     return {}
-
-sp_index = get_single_peak_index()
 
 def plot_dft_magnitude(samples, sr=fp.SAMPLE_RATE):
     freqs, mag = fp.compute_dft_magnitude(samples, sr=sr)
